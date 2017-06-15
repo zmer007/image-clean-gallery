@@ -1,0 +1,13 @@
+{
+  "name": "image-gallery",
+  "version": "0.0.1",
+  "main": "app.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^1.6.10",
+    "jquery": "^3.2.1",
+    "mysql": "^2.13.0"
+  }
+}

@@ -1,0 +1,171 @@
+window.$ = require('jquery')
+const mysql = require('mysql')
+const plt_dir = '/home/lgd/work/plt5k/plt5k-20161216/'
+const db_table = 'tag_plant'
+
+// 数据库中图片标记， 0代表未处理， 1～99为保留标记， 100处理过，101代表脏数据
+const IMAGE_TAG_OK = 100
+const IMAGE_TAG_DIRTY = 101;
+
+const background_normal = '#f00'
+const background_select = '#00f'
+
+var connection = mysql.createConnection({
+		host	: 'localhost',
+		user	: 'root',
+		password: 'imdfer',
+		database: 'plt5k'
+})
+
+class ImgBean{
+	constructor(id, tag){
+		this.id = id
+		this.tag = tag
+	}
+}
+
+var currentImgBeans = []
+var imgBeansCache = []
+
+const sql_query_100 = 'select * from '+db_table+' where tag=101 order by rand() limit 100'
+
+$(function(){
+	var imgs = ''
+	for (var i=0; i<100; i++) {
+		imgs += getImgHtml(i)
+	}
+
+	$('#image_container').append(imgs)
+
+	for (var i=0; i<100; i++){
+		$("#img"+i).click(function(){
+			const imgBean = currentImgBeans[$(this).attr('index')]
+			const imgParent = $(this).parent()
+			if(imgBean.tag == IMAGE_TAG_DIRTY){
+				connection.query(updateSQL([imgBean], IMAGE_TAG_OK), function(err){
+					if(err){
+						alert(err)
+					}
+					imgParent.css('background-color', background_normal)
+					imgBean.tag = IMAGE_TAG_OK
+				})
+			} else{
+				connection.query(updateSQL([imgBean], IMAGE_TAG_DIRTY), function(err){
+					if(err){
+						alert(err)
+					}
+					imgParent.css('background-color', background_select)
+					imgBean.tag = IMAGE_TAG_DIRTY
+					console.log(imgBean.id);
+				})
+			}
+		})
+	}
+
+	window.onmouseup = function(ev){
+		if(ev.button == 2){
+			// for (var i = 0; i < currentImgBeans.length; i++) {
+			// 	if (currentImgBeans[i].tag == 0){
+			// 		currentImgBeans[i].tag = IMAGE_TAG_OK
+			// 	}
+			// }
+			// console.log(updateSQL(currentImgBeans));
+
+			currentImgBeans = []
+
+			connection.query(sql_query_100, function(err, results, feilds){
+				if(err){
+					alert(err)
+					return
+				}
+				for (var i = 0; i < results.length; i++) {
+					currentImgBeans.push(new ImgBean(results[i].plt_id, results[i].tag));
+					$('#img'+i).attr('src', plt_dir+results[i].path)
+					$('#img'+i).parent().css('background-color', background_normal)
+				}
+			})
+
+			// connection.query(updateSQL(currentImgBeans), function(err){
+			// 	if(err){
+			// 		alert('有错误，请重启应用' + err)
+			// 		return
+			// 	}
+			//
+			// 	imgBeansCache = currentImgBeans
+			// 	currentImgBeans = []
+			//
+			// 	connection.query(sql_query_100, function(err, results, feilds){
+			// 		for (var i = 0; i < results.length; i++) {
+			// 			currentImgBeans.push(new ImgBean(results[i].plt_id, results[i].tag));
+			// 			$('#img'+i).attr('src', plt_dir+results[i].path)
+			// 			$('#img'+i).parent().css('background-color', background_normal)
+			// 		}
+			// 	})
+			// })
+		}
+	}
+
+	window.onkeyup = function(ev){
+		// 38 -> ctrl; 17 -> up
+		if(ev.keyCode == 38 || ev.keyCode == 17){
+			if(imgBeansCache.length == 0){
+				return
+			}
+			console.log(queryInIds(imgBeansCache));
+			connection.query(queryInIds(imgBeansCache), function(err, results, feilds){
+				if(err){
+					alert(err)
+				}
+				imgBeansCache = []
+				currentImgBeans = []
+				for (var i = 0; i < results.length; i++) {
+					currentImgBeans.push(new ImgBean(results[i].plt_id, results[i].tag));
+					$('#img'+i).attr('src', plt_dir+results[i].path)
+					if(results[i].tag == IMAGE_TAG_DIRTY){
+						$('#img'+i).parent().css('background-color', background_select)
+					}else{
+						$('#img'+i).parent().css('background-color', background_normal)
+					}
+				}
+			})
+		}
+	}
+
+	function queryInIds(imgBeans){
+		var result = "select * from "+ db_table +" where plt_id in (" + imgBeans[0].id
+		for (var i=1; i<imgBeans.length; i++){
+			result += ", " + imgBeans[i].id
+		}
+		return result + ")"
+	}
+
+	connection.connect(function(err){
+		if (err){
+			alert("打开数据库失败")
+		}
+		connection.query(sql_query_100, function(err, results, feilds){
+			if(err){
+				alert(err)
+				return
+			}
+			for (var i = 0; i < results.length; i++) {
+				currentImgBeans.push(new ImgBean(results[i].plt_id, results[i].tag));
+				$('#img'+i).attr('src', plt_dir+results[i].path)
+				$('#img'+i).parent().css('background-color', background_normal)
+			}
+		})
+	})
+
+	function updateSQL(imgBeans){
+		result = "insert into "+db_table+" (plt_id, tag) values " + "("+imgBeans[0].id+", "+ imgBeans[0].tag +")"
+		for (var i = 1; i<imgBeans.length; i++) {
+			result += ',('+imgBeans[i].id+','+imgBeans[i].tag+')'
+		}
+		return result + "on duplicate key update tag=values(tag)"
+	}
+
+	function getImgHtml(id){
+		var imgId = "img"+id
+		return "<div class='img_box'><img index='"+id+"' id='"+imgId+"'/></div>"
+	}
+})
